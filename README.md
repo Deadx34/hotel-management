@@ -51,19 +51,5 @@ npm start
 The application will open in your browser, typically at http://localhost:3000.
 
 
-
-
-
-📂 How to Use
-As this is a self-contained HTML file, no build process or server is required.
-
-Clone the repository:
-
-git clone https://github.com/your-username/ai-hospitality-infographic.git
-
-Navigate to the project directory.
-
-Open the index.html file (or the file containing the infographic code) directly in your web browser.
-
 📄 License
 This project is licensed under the MIT License. See the LICENSE file for details.
