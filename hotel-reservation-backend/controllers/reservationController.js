@@ -1,5 +1,10 @@
-// Add this function to your existing controller file
-exports.createReservation = async (req, res) => {
+// controllers/reservationController.js
+
+// Make sure you require your Reservation model at the top
+const Reservation = require('../models/Reservation'); 
+
+// FUNCTION 1: createReservation
+const createReservation = async (req, res) => {
     try {
         const {
             guestName,
@@ -40,11 +45,25 @@ exports.createReservation = async (req, res) => {
             error: error.message
         });
     }
-
-    module.exports = {
-    getReservations,
-    updateReservationStatus,
-    createReservation // if you add it
 };
 
+// FUNCTION 2: getReservations (Add your logic here)
+const getReservations = async (req, res) => {
+    // TODO: Add your logic to fetch reservations from the database
+    res.status(200).json({ success: true, message: "getReservations logic goes here" });
+};
+
+// FUNCTION 3: updateReservationStatus (Add your logic here)
+const updateReservationStatus = async (req, res) => {
+    // TODO: Add your logic to update a reservation's status
+    res.status(200).json({ success: true, message: "updateReservationStatus logic goes here" });
+};
+
+
+// THIS IS THE MOST IMPORTANT PART
+// Export all functions together at the end of the file.
+module.exports = {
+    createReservation,
+    getReservations,
+    updateReservationStatus
 };
