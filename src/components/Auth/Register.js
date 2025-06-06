@@ -13,24 +13,57 @@ const Register = () => {
         email: '',
         phone: ''
     });
-    const [error, setError] = useState('');
+    const [errors, setErrors] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
 
     const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        setFormData({ ...formData, [name]: value });
+        // Clear error when user starts typing
+        if (errors[name]) {
+            setErrors({ ...errors, [name]: '' });
+        }
+    };
+
+    const validateForm = () => {
+        const newErrors = {};
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const phoneRegex = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/;
+
+        if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
+        if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
+        if (!formData.email.trim()) {
+            newErrors.email = 'Email is required';
+        } else if (!emailRegex.test(formData.email)) {
+            newErrors.email = 'Please enter a valid email';
+        }
+        if (formData.phone && !phoneRegex.test(formData.phone)) {
+            newErrors.phone = 'Please enter a valid phone number';
+        }
+        if (!formData.username.trim()) newErrors.username = 'Username is required';
+        if (!formData.password) {
+            newErrors.password = 'Password is required';
+        } else if (formData.password.length < 8) {
+            newErrors.password = 'Password must be at least 8 characters';
+        }
+        if (formData.password !== formData.confirmPassword) {
+            newErrors.confirmPassword = 'Passwords do not match';
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError('');
-
-        if (formData.password !== formData.confirmPassword) {
-            setError('Passwords do not match.');
-            return;
-        }
+        
+        if (!validateForm()) return;
+        
+        setIsSubmitting(true);
+        setErrors({});
 
         try {
-            // A customer gives personal details when making a reservation or registering 
             const registrationData = {
                 username: formData.username,
                 password: formData.password,
@@ -43,51 +76,138 @@ const Register = () => {
             };
 
             await api.register(registrationData);
-            alert('Registration successful! Please log in.');
-            navigate('/login'); // Redirect to login page after successful registration
+            navigate('/login', { 
+                state: { 
+                    successMessage: 'Registration successful! Please log in.' 
+                } 
+            });
         } catch (err) {
-            setError(err.response?.data?.message || 'Registration failed. Please try again.');
+            setErrors({
+                ...errors,
+                form: err.response?.data?.message || 'Registration failed. Please try again.'
+            });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     return (
         <div className="auth-container">
-            <form className="auth-form" onSubmit={handleSubmit}>
-                <h2>Register</h2>
-                {error && <p className="error-message">{error}</p>}
-                <div className="form-group">
-                    <label>First Name</label>
-                    <input type="text" name="firstName" onChange={handleChange} required />
+            <div className="auth-card">
+                <div className="auth-header">
+                    <h2>Create Account</h2>
+                    <p>Join us to start your journey</p>
                 </div>
-                <div className="form-group">
-                    <label>Last Name</label>
-                    <input type="text" name="lastName" onChange={handleChange} required />
+                
+                {errors.form && <div className="alert error">{errors.form}</div>}
+
+                <form className="auth-form" onSubmit={handleSubmit} noValidate>
+                    <div className="form-row">
+                        <div className={`form-group ${errors.firstName ? 'error' : ''}`}>
+                            <label htmlFor="firstName">First Name</label>
+                            <input
+                                type="text"
+                                id="firstName"
+                                name="firstName"
+                                value={formData.firstName}
+                                onChange={handleChange}
+                                required
+                            />
+                            {errors.firstName && <span className="error-message">{errors.firstName}</span>}
+                        </div>
+                        <div className={`form-group ${errors.lastName ? 'error' : ''}`}>
+                            <label htmlFor="lastName">Last Name</label>
+                            <input
+                                type="text"
+                                id="lastName"
+                                name="lastName"
+                                value={formData.lastName}
+                                onChange={handleChange}
+                                required
+                            />
+                            {errors.lastName && <span className="error-message">{errors.lastName}</span>}
+                        </div>
+                    </div>
+
+                    <div className={`form-group ${errors.email ? 'error' : ''}`}>
+                        <label htmlFor="email">Email</label>
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            value={formData.email}
+                            onChange={handleChange}
+                            required
+                        />
+                        {errors.email && <span className="error-message">{errors.email}</span>}
+                    </div>
+
+                    <div className={`form-group ${errors.phone ? 'error' : ''}`}>
+                        <label htmlFor="phone">Phone Number (Optional)</label>
+                        <input
+                            type="tel"
+                            id="phone"
+                            name="phone"
+                            value={formData.phone}
+                            onChange={handleChange}
+                            placeholder="+1 (123) 456-7890"
+                        />
+                        {errors.phone && <span className="error-message">{errors.phone}</span>}
+                    </div>
+
+                    <div className={`form-group ${errors.username ? 'error' : ''}`}>
+                        <label htmlFor="username">Username</label>
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            value={formData.username}
+                            onChange={handleChange}
+                            required
+                        />
+                        {errors.username && <span className="error-message">{errors.username}</span>}
+                    </div>
+
+                    <div className={`form-group ${errors.password ? 'error' : ''}`}>
+                        <label htmlFor="password">Password</label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            value={formData.password}
+                            onChange={handleChange}
+                            required
+                        />
+                        {errors.password && <span className="error-message">{errors.password}</span>}
+                        <div className="password-hint">Must be at least 8 characters</div>
+                    </div>
+
+                    <div className={`form-group ${errors.confirmPassword ? 'error' : ''}`}>
+                        <label htmlFor="confirmPassword">Confirm Password</label>
+                        <input
+                            type="password"
+                            id="confirmPassword"
+                            name="confirmPassword"
+                            value={formData.confirmPassword}
+                            onChange={handleChange}
+                            required
+                        />
+                        {errors.confirmPassword && <span className="error-message">{errors.confirmPassword}</span>}
+                    </div>
+
+                    <button 
+                        type="submit" 
+                        className="auth-button" 
+                        disabled={isSubmitting}
+                    >
+                        {isSubmitting ? 'Creating Account...' : 'Create Account'}
+                    </button>
+                </form>
+
+                <div className="auth-footer">
+                    <p>Already have an account? <Link to="/login" className="auth-link">Sign In</Link></p>
                 </div>
-                <div className="form-group">
-                    <label>Email</label>
-                    <input type="email" name="email" onChange={handleChange} required />
-                </div>
-                 <div className="form-group">
-                    <label>Phone</label>
-                    <input type="tel" name="phone" onChange={handleChange} />
-                </div>
-                <div className="form-group">
-                    <label>Username</label>
-                    <input type="text" name="username" onChange={handleChange} required />
-                </div>
-                <div className="form-group">
-                    <label>Password</label>
-                    <input type="password" name="password" onChange={handleChange} required />
-                </div>
-                <div className="form-group">
-                    <label>Confirm Password</label>
-                    <input type="password" name="confirmPassword" onChange={handleChange} required />
-                </div>
-                <button type="submit" className="auth-button">Register</button>
-                <p className="auth-switch-link">
-                    Already have an account? <Link to="/login">Login here</Link>
-                </p>
-            </form>
+            </div>
         </div>
     );
 };
