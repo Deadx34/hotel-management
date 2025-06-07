@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import RoomListing from './components/RoomListing'; // Adjust the path as needed
 
 // Import your pages and components
 import HomePage from './pages/HomePage';
@@ -18,6 +19,7 @@ function App() {
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} /> {/* <-- 2. ADD THE NEW ROUTE */}
                     <Route path="/dashboard" element={<DashboardPage />} />
+                     <Route path="/rooms" element={<RoomListing />} />
                 </Routes>
             </main>
         </Router>

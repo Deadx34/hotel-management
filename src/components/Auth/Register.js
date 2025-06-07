@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import * as api from '../../services/api';
+// Import Firebase services we need
+import { auth, db } from '../../firebase-config';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import './Auth.css';
 
 const Register = () => {
@@ -20,7 +23,6 @@ const Register = () => {
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value });
-        // Clear error when user starts typing
         if (errors[name]) {
             setErrors({ ...errors, [name]: '' });
         }
@@ -29,7 +31,8 @@ const Register = () => {
     const validateForm = () => {
         const newErrors = {};
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const phoneRegex = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/;
+        // Updated phone regex for simplicity, adjust as needed
+        const phoneRegex = /^\+?[0-9\s-()]{7,}$/;
 
         if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
         if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
@@ -57,48 +60,72 @@ const Register = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!validateForm()) return;
-        
+
         setIsSubmitting(true);
         setErrors({});
 
         try {
-            const registrationData = {
-                username: formData.username,
-                password: formData.password,
-                personalDetails: {
-                    firstName: formData.firstName,
-                    lastName: formData.lastName,
-                    email: formData.email,
-                    phone: formData.phone
-                }
-            };
+            // --- FIREBASE LOGIC STARTS HERE ---
 
-            await api.register(registrationData);
-            navigate('/login', { 
-                state: { 
-                    successMessage: 'Registration successful! Please log in.' 
-                } 
+            // 1. Create user with email and password in Firebase Auth
+            const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+            const user = userCredential.user;
+
+            // 2. (Optional but good practice) Update the user's profile with their name
+            await updateProfile(user, {
+                displayName: `${formData.firstName} ${formData.lastName}`
             });
+
+            // 3. Create a document in Firestore to store additional user details
+            // We use the user's unique ID (user.uid) from Auth as the document ID
+            await setDoc(doc(db, "users", user.uid), {
+                username: formData.username,
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                email: formData.email,
+                phone: formData.phone,
+                role: 'customer',
+                createdAt: new Date() // Good practice to store a creation timestamp
+            });
+
+            // --- FIREBASE LOGIC ENDS HERE ---
+
+            // Navigate to login page with a success message
+            navigate('/login', {
+                state: {
+                    successMessage: 'Registration successful! Please log in.'
+                }
+            });
+
         } catch (err) {
-            setErrors({
-                ...errors,
-                form: err.response?.data?.message || 'Registration failed. Please try again.'
-            });
+            // Handle Firebase-specific errors
+            let errorMessage = 'Registration failed. Please try again.';
+            if (err.code === 'auth/email-already-in-use') {
+                errorMessage = 'This email address is already registered. Please try logging in.';
+            } else if (err.code === 'auth/weak-password') {
+                errorMessage = 'The password is too weak. Please use at least 6 characters.';
+            } else if (err.code === 'auth/invalid-email') {
+                errorMessage = 'The email address is not valid.';
+            }
+            console.error("Firebase registration error:", err.code, err.message);
+            setErrors({ form: errorMessage });
         } finally {
             setIsSubmitting(false);
         }
     };
 
     return (
+        // ... Your JSX for the form remains exactly the same ...
+        // No changes needed in the return() block
         <div className="auth-container">
             <div className="auth-card">
                 <div className="auth-header">
                     <h2>Create Account</h2>
                     <p>Join us to start your journey</p>
                 </div>
-                
+
                 {errors.form && <div className="alert error">{errors.form}</div>}
 
                 <form className="auth-form" onSubmit={handleSubmit} noValidate>
@@ -195,9 +222,9 @@ const Register = () => {
                         {errors.confirmPassword && <span className="error-message">{errors.confirmPassword}</span>}
                     </div>
 
-                    <button 
-                        type="submit" 
-                        className="auth-button" 
+                    <button
+                        type="submit"
+                        className="auth-button"
                         disabled={isSubmitting}
                     >
                         {isSubmitting ? 'Creating Account...' : 'Create Account'}

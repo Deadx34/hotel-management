@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import * as api from '../../services/api';
+// Import Firebase services we need
+import { auth } from '../../firebase-config'; // Assuming your config file is at this path
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 // MUI Components
 import {
@@ -21,10 +23,11 @@ import {
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import LoginIcon from '@mui/icons-material/Login';
-import AccountCircle from '@mui/icons-material/AccountCircle';
+import EmailIcon from '@mui/icons-material/Email'; // Changed from AccountCircle
 
 const Login = () => {
-    const [formData, setFormData] = useState({ username: '', password: '' });
+    // State now uses email instead of username
+    const [formData, setFormData] = useState({ email: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -38,13 +41,26 @@ const Login = () => {
         e.preventDefault();
         setError('');
         setLoading(true);
+
         try {
-            const { data } = await api.login(formData);
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('user', JSON.stringify(data.user));
+            // --- FIREBASE LOGIN LOGIC ---
+            await signInWithEmailAndPassword(auth, formData.email, formData.password);
+
+            // No need to manually set items in localStorage.
+            // Firebase automatically persists the user's session.
+            
             navigate('/dashboard');
+
         } catch (err) {
-            setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+            // Handle specific Firebase errors
+            let errorMessage = 'Login failed. Please check your credentials.';
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+                errorMessage = 'Invalid email or password.';
+            } else if (err.code === 'auth/invalid-email') {
+                errorMessage = 'Please enter a valid email address.';
+            }
+            console.error("Firebase login error:", err.code, err.message);
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -78,20 +94,22 @@ const Login = () => {
                         </Alert>
                     )}
 
+                    {/* Changed TextField to accept email */}
                     <TextField
                         margin="normal"
                         required
                         fullWidth
-                        id="username"
-                        label="Username"
-                        name="username"
-                        autoComplete="username"
+                        id="email"
+                        label="Email Address"
+                        name="email"
+                        autoComplete="email"
                         autoFocus
+                        value={formData.email}
                         onChange={handleChange}
                         InputProps={{
                             startAdornment: (
                                 <InputAdornment position="start">
-                                    <AccountCircle />
+                                    <EmailIcon />
                                 </InputAdornment>
                             ),
                         }}
@@ -106,10 +124,11 @@ const Login = () => {
                         type={showPassword ? 'text' : 'password'}
                         id="password"
                         autoComplete="current-password"
+                        value={formData.password}
                         onChange={handleChange}
                         InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
+                            endAdornment: ( // Changed to endAdornment for better UX
+                                <InputAdornment position="end">
                                     <IconButton
                                         aria-label="toggle password visibility"
                                         onClick={handleTogglePassword}

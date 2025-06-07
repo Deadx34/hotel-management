@@ -30,3 +30,14 @@ export const getMyReservations = () => API.get('/reservations');
 // Updates the status of a reservation (for cancelling, check-in, etc.)
 // This was missing the 'export' keyword
 export const updateReservationStatus = (id, status) => API.patch(`/reservations/${id}/status`, { status });
+
+// In your api.js file
+export const getAvailableRooms = async (params) => {
+  try {
+    // This should match your backend API endpoint
+    const response = await axios.get('/api/rooms/available', { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};

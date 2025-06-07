@@ -1,81 +1,215 @@
-import React, { useState, useEffect } from 'react';
-import * as api from '../../services/api';
-import './Dashboard.css'; // Let's add some basic styling
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+// Firebase Imports
+import { auth, db } from '../../firebase-config'; // Ensure path is correct
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+
+// Material-UI (MUI) Components
+import {
+    AppBar,
+    Toolbar,
+    Typography,
+    Container,
+    Grid,
+    Card,
+    CardContent,
+    CardActions,
+    Button,
+    Box,
+    CircularProgress,
+    Chip,
+    Alert,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
+    Paper, // <--- ADD THIS LINE
+} from '@mui/material';
+
+// MUI Icons
+import LogoutIcon from '@mui/icons-material/Logout';
+import BedIcon from '@mui/icons-material/Bed';
+
+// Helper to get color for status chip
+const getStatusChipColor = (status) => {
+    switch (status) {
+        case 'confirmed':
+            return 'primary';
+        case 'checked-in':
+            return 'success';
+        case 'checked-out':
+            return 'default';
+        case 'cancelled':
+            return 'error';
+        case 'pending':
+            return 'warning';
+        default:
+            return 'secondary';
+    }
+};
 
 const CustomerDashboard = () => {
     const [reservations, setReservations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const user = JSON.parse(localStorage.getItem('user'));
+    const [currentUser, setCurrentUser] = useState(null);
+    const [openDialog, setOpenDialog] = useState(false);
+    const [selectedReservationId, setSelectedReservationId] = useState(null);
+    const navigate = useNavigate();
 
-    const fetchReservations = async () => {
+    // --- Data Fetching Logic ---
+    const fetchReservations = useCallback(async (user) => {
+        if (!user) return;
+        setLoading(true);
         try {
-            const { data } = await api.getMyReservations();
-            setReservations(data);
+            // Query for reservations created by the current user
+            const q = query(collection(db, "reservations"), where("createdBy", "==", user.uid));
+            const querySnapshot = await getDocs(q);
+            const userReservations = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setReservations(userReservations);
         } catch (err) {
             setError('Failed to load reservations.');
             console.error(err);
         } finally {
             setLoading(false);
         }
-    };
-
-    useEffect(() => {
-        fetchReservations();
     }, []);
 
-    const handleCancelReservation = async (reservationId) => {
-        if (window.confirm('Are you sure you want to cancel this reservation?')) {
-            try {
-                // A customer may cancel reservations via the website 
-                await api.updateReservationStatus(reservationId, 'cancelled');
-                alert('Reservation successfully cancelled.');
-                // Refresh the list after cancelling
-                fetchReservations();
-            } catch (err) {
-                alert('Failed to cancel reservation.');
-                console.error(err);
+    // --- Authentication State Observer ---
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                setCurrentUser(user);
+                fetchReservations(user);
+            } else {
+                setCurrentUser(null);
+                navigate('/login'); // Redirect if not logged in
             }
+        });
+        return () => unsubscribe(); // Cleanup listener on unmount
+    }, [fetchReservations, navigate]);
+
+
+    // --- Action Handlers ---
+    const handleLogout = async () => {
+        await signOut(auth);
+        navigate('/login');
+    };
+
+    const openCancelDialog = (reservationId) => {
+        setSelectedReservationId(reservationId);
+        setOpenDialog(true);
+    };
+
+    const closeCancelDialog = () => {
+        setSelectedReservationId(null);
+        setOpenDialog(false);
+    };
+
+    const confirmCancelReservation = async () => {
+        if (!selectedReservationId) return;
+        try {
+            const reservationDocRef = doc(db, "reservations", selectedReservationId);
+            await updateDoc(reservationDocRef, { status: 'cancelled' });
+            closeCancelDialog();
+            fetchReservations(currentUser); // Refresh the list
+        } catch (err) {
+            setError('Failed to cancel reservation.');
+            console.error(err);
         }
     };
 
-    if (loading) return <p>Loading your reservations...</p>;
-    if (error) return <p style={{ color: 'red' }}>{error}</p>;
+    // --- UI Rendering ---
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
 
     return (
-        <div className="dashboard-container">
-            <h2>Welcome, {user?.personalDetails?.firstName || user?.username}!</h2>
-            <p>Here you can view and manage your reservations.</p>
+        <Box sx={{ flexGrow: 1, backgroundColor: '#f4f6f8', minHeight: '100vh' }}>
+            {/* --- Header Bar --- */}
+            <AppBar position="static">
+                <Toolbar>
+                    <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                        Welcome, {currentUser?.displayName?.split(' ')[0] || 'Guest'}
+                    </Typography>
+                    <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout}>
+                        Logout
+                    </Button>
+                </Toolbar>
+            </AppBar>
 
-            <div className="reservations-list">
-                <h3>My Reservations</h3>
+            {/* --- Main Content --- */}
+            <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+                <Typography variant="h4" gutterBottom>My Reservations</Typography>
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                
                 {reservations.length > 0 ? (
-                    reservations.map(res => (
-                        <div key={res._id} className={`reservation-card ${res.status}`}>
-                            <div className="card-header">
-                                <h4>Room: {res.room ? res.room.type : 'N/A'}</h4>
-                                <span className={`status-badge ${res.status}`}>{res.status}</span>
-                            </div>
-                            <div className="card-body">
-                                <p><strong>Arrival:</strong> {new Date(res.arrivalDate).toLocaleDateString()}</p>
-                                <p><strong>Departure:</strong> {new Date(res.departureDate).toLocaleDateString()}</p>
-                                <p><strong>Occupants:</strong> {res.numberOfOccupants}</p>
-                            </div>
-                            <div className="card-actions">
-                                {res.status !== 'cancelled' && res.status !== 'checked-out' && (
-                                    <>
-                                        <button className="btn-secondary" disabled>Change</button>
-                                        <button className="btn-danger" onClick={() => handleCancelReservation(res._id)}>Cancel</button>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    ))
+                    <Grid container spacing={3}>
+                        {reservations.map(res => (
+                            <Grid item key={res.id} xs={12} sm={6} md={4}>
+                                <Card elevation={3}>
+                                    <CardContent>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                            <Typography variant="h6" component="div">
+                                                {res.roomType || 'Room'}
+                                            </Typography>
+                                            <Chip label={res.status} color={getStatusChipColor(res.status)} size="small" />
+                                        </Box>
+                                        <Typography color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
+                                            <BedIcon sx={{ mr: 1, fontSize: '1rem' }}/>
+                                            Guests: {res.numberOfGuests || 'N/A'}
+                                        </Typography>
+                                        <Typography color="text.secondary">
+                                            Arrival: {res.checkInDate ? new Date(res.checkInDate.toDate()).toLocaleDateString() : 'N/A'}
+                                        </Typography>
+                                        <Typography color="text.secondary">
+                                            Departure: {res.checkOutDate ? new Date(res.checkOutDate.toDate()).toLocaleDateString() : 'N/A'}
+                                        </Typography>
+                                    </CardContent>
+                                    <CardActions>
+                                        {res.status !== 'cancelled' && res.status !== 'checked-out' && (
+                                            <Button size="small" color="error" onClick={() => openCancelDialog(res.id)}>
+                                                Cancel Reservation
+                                            </Button>
+                                        )}
+                                    </CardActions>
+                                </Card>
+                            </Grid>
+                        ))}
+                    </Grid>
                 ) : (
-                    <p>You have no reservations. Time to book a trip!</p>
+                    <Paper sx={{ p: 4, textAlign: 'center' }}>
+                        <Typography variant="h6">You have no reservations.</Typography>
+                        <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate('/book-reservation')}>
+                            Book a room
+                        </Button>
+                    </Paper>
                 )}
-            </div>
-        </div>
+            </Container>
+
+            {/* --- Confirmation Dialog for Cancellation --- */}
+            <Dialog open={openDialog} onClose={closeCancelDialog}>
+                <DialogTitle>Confirm Cancellation</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to permanently cancel this reservation? This action cannot be undone.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={closeCancelDialog}>Back</Button>
+                    <Button onClick={confirmCancelReservation} color="error" autoFocus>
+                        Yes, Cancel It
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
     );
 };
 
